@@ -5,7 +5,7 @@
 #include <math.h>
 #include <stdint.h>
 
-#define NUM_CELLS 10
+#define NUM_CELLS 1
 
 //All state space variables and battery parameters
 //battery parameters must be obtained from pulse discharge test
@@ -35,7 +35,7 @@ typedef struct{
     float b;                            //R_1(1 - a)
 
 } EKF_1RC;
-extern EKF_1RC ekf[NUM_CELLS];
+EKF_1RC ekf[NUM_CELLS];
 
 const float a = 2.50638087f;
 const float b = 4.05668091f;
@@ -57,7 +57,7 @@ void cells_INIT(int i){
     ekf[i].SoC = 0.5;              //initializing SoC at 50%
     ekf[i].Vrc = 0.0;
     ekf[i].R_0 = 0.03;            //internal resistance is 0.03 milli-ohms based on the datasheet
-    ekf[i].Q_nom = 3.5 * 3600;    //Nomincal capacity is 3500 mAhr = 3.5 Ahr
+    ekf[i].Q_nom = 3.5;           //Nomincal capacity is 3500 mAhr = 3.5 Ahr
 
 
     ekf[i].R_1 = 0.015; //milli-ohms
@@ -107,7 +107,7 @@ void Correction_MeasUpdate( int idx, float V, float I){
     //Vt = V_OCV(SoC(K)) - Vrc - R0*I(K)
     float V_Predict = OCV_SOC(ekf[idx].SoC) - ekf[idx].Vrc - ekf[idx].R_0* I;
     float dK = V - V_Predict;
-
+    
     //linearize measurement equation 
     //Hk = dh(x,u)/dx = [d(V_OCV(SoC(K)))/d(SoC) -1]
     float H_0 = dOCV_dSoC(ekf[idx].SoC);

@@ -3,8 +3,8 @@
 #include "EKF_Functions.h" //ALL EKF FUNCTIONS FOR BQ
 
 //#define CELL_NO_TO_ADDR(cellNo) (0x14 + ((cellNo-1)*2))
-#define NUM_TASKS 3
-#define buttonA_pin 4
+#define NUM_TASKS 2
+#define buttonA_pin A0
 
 typedef struct task{
 	signed 	 char state; 		//Task's current state
@@ -14,6 +14,12 @@ typedef struct task{
 } task;
 
 task tasks[NUM_TASKS]; // declared task array with 5 tasks
+
+//ALL PERIODS TO DECLARE
+const unsigned long EKF_Period = 500; //100ms
+const unsigned long Button_Period = 500;
+//const unsigned char BMS_Period = 100;
+const unsigned long GCD_PERIOD = 500;
 
 void TimerISR() {
 	for ( unsigned int i = 0; i < NUM_TASKS; i++ ) {                   // Iterate through each task in the task array
@@ -25,19 +31,12 @@ void TimerISR() {
 	}
 }
 
-//ALL PERIODS TO DECLARE
-const unsigned char EKF_Period = 100; //100ms
-const unsigned char Button_Period = 100;
-const unsigned char BMS_Period = 100;
-const unsigned char GCD_PERIOD = 100;
-
 //ALL GLOBAL VARIABLES SHARED ACROSS TICK FUNCTIONS
-EKF_1RC ekf[NUM_CELLS];
 bool SysON;
 bool CHARGE;
-bool CHRG_FET;
-float current; //get current command (ex 100mA or -10mA)
-uint16_t cell_v[10]; //get voltage in mV (ex. 3700 mV) for each cell
+//bool CHRG_FET;
+//float current; //get current command (ex 100mA or -10mA)
+//uint16_t cell_v[10]; //get voltage in mV (ex. 3700 mV) for each cell
 
 /*-------------------------------------------*/
 /*--------- Button State Machine ------------*/
@@ -91,7 +90,10 @@ int Button_TickFun(int state){
 /*-------------------------------------------*/
 enum EKF_State { EKF_init, EKF_RUN};
 int TickFun_ExtendedKalmanFilter(int state){
-    static unsigned char i;
+    //static unsigned char i;
+    static float current = 0.031f;
+    static float voltage = 3.65f;
+    const float min_SOC = 0.3;
 
     //State transitions
     switch(state){
@@ -99,9 +101,10 @@ int TickFun_ExtendedKalmanFilter(int state){
             //setting up parameters for each cell (total of 10)
             //please initalize all parameters and variables before proceeding!!
             //ALL PARAMETERS ARE IN THE EKF_FUNCTIONS.h
-            for(int idx = 0; idx < NUM_CELLS; idx++){
-                cells_INIT(idx);}
-            i = 0;
+            /*for(int idx = 0; idx < NUM_CELLS; idx++){
+                cells_INIT(idx);}*/
+            cells_INIT(1);
+            //i = 0;
             state = EKF_RUN;
             break;
 
@@ -120,14 +123,24 @@ int TickFun_ExtendedKalmanFilter(int state){
         break;
 
         case(EKF_RUN):
-        float I_A = current / 1000.0f;     //convert mA → A
-        if(i < NUM_CELLS){
-            float V_V = cell_v[i] / 1000.0f;   // *** FIXED: mV → V
-            Prediction_TimeUpdate(i, I_A);
-            Correction_MeasUpdate(i, V_V, I_A); 
+        //float I_A = current / 1000.0f;     //convert mA → A
+        if(SysON && ekf[1].SoC > min_SOC){
+            Prediction_TimeUpdate(1, current);
+            Correction_MeasUpdate(1, voltage, current);
+
+            Serial.print("Measured Voltage: ");
+            Serial.println(voltage);
+            Serial.print("Soc: ");
+            Serial.println(ekf[1].SoC);
+
+            voltage -= 0.002f;   // simulate discharge drop
         }
-        else{
-            i = 0; //restart the indexing
+        else if ( SysON && ekf[1].SoC <= min_SOC ){
+            Serial.println("EKF AT THRESHOLD - STOPPED");
+        }
+        else if (!SysON){
+            Serial.println("Sys off");
+
         }
 
         break;
@@ -244,11 +257,11 @@ int BMS_Test_TickFun(int state){
 
 void setup() {
   Wire.begin();
-  Serial.begin(115200);
+  Serial.begin(9600);
   delay(10);
   
   pinMode(buttonA_pin, INPUT);
-
+/*
   // 1) Enter CONFIGUPDATE mode: subcommand 0x0090
   sendSubcommand(0x0090);
   waitCfgUpdate(true);
@@ -265,6 +278,7 @@ void setup() {
   // 4) Exit CONFIGUPDATE: subcommand 0x0092
   sendSubcommand(0x0092);
   waitCfgUpdate(false);
+*/
 
   //Set up Tasks
   // TODO: Assign your tasks into the tasks[] array
