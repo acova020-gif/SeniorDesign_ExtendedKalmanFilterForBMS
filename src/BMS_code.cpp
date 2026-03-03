@@ -1,15 +1,10 @@
 #include "BQ_Commands.h"    //ALL COMMANDS/SUBCOMMANDS FUNCTIONS FOR BQ
 #include "TimerISR.h"
 #include "EKF_Functions.h" //ALL EKF FUNCTIONS FOR BQ
-#include <Arduino.h>
 
 //#define CELL_NO_TO_ADDR(cellNo) (0x14 + ((cellNo-1)*2))
 #define NUM_TASKS 2
-<<<<<<< HEAD
-unsigned char buttonA_pin = A0;
-=======
 #define buttonA_pin A0
->>>>>>> test-code
 
 typedef struct task{
 	signed 	 char state; 		//Task's current state
@@ -19,19 +14,6 @@ typedef struct task{
 } task;
 
 task tasks[NUM_TASKS]; // declared task array with 5 tasks
-EKF_1RC ekf[NUM_CELLS];
-
-bool SysON;
-bool CHARGE;
-bool CHRG_FET;
-float current; //get current command (ex 100mA or -10mA)
-//uint16_t cell_v[10]; //get voltage in mV (ex. 3700 mV) for each cell
-
-//ALL PERIODS TO DECLARE
-const unsigned long EKF_Period = 500; //100ms
-const unsigned long Button_Period = 500;
-//const unsigned char BMS_Period = 100;
-const unsigned long GCD_PERIOD = 500;
 
 //ALL PERIODS TO DECLARE
 const unsigned long EKF_Period = 500; //100ms
@@ -49,8 +31,6 @@ void TimerISR() {
 	}
 }
 
-<<<<<<< HEAD
-=======
 //ALL GLOBAL VARIABLES SHARED ACROSS TICK FUNCTIONS
 bool SysON;
 bool CHARGE;
@@ -58,7 +38,6 @@ bool CHARGE;
 //float current; //get current command (ex 100mA or -10mA)
 //uint16_t cell_v[10]; //get voltage in mV (ex. 3700 mV) for each cell
 
->>>>>>> test-code
 /*-------------------------------------------*/
 /*--------- Button State Machine ------------*/
 /*-------------------------------------------*/
@@ -111,16 +90,12 @@ int Button_TickFun(int state){
 /*-------------------------------------------*/
 enum EKF_State { EKF_init, EKF_RUN};
 int TickFun_ExtendedKalmanFilter(int state){
-<<<<<<< HEAD
-    static unsigned char i;
-    float current = 0.3;
-    static float voltage = 3.65;
-=======
     //static unsigned char i;
     static float current = 0.031f;
     static float voltage = 3.65f;
+
     const float min_SOC = 0.3;
->>>>>>> test-code
+    const float max_SOC = 0.8;
 
     //State transitions
     switch(state){
@@ -128,17 +103,10 @@ int TickFun_ExtendedKalmanFilter(int state){
             //setting up parameters for each cell (total of 10)
             //please initalize all parameters and variables before proceeding!!
             //ALL PARAMETERS ARE IN THE EKF_FUNCTIONS.h
-<<<<<<< HEAD
-            for(int idx = 0; idx < NUM_CELLS; idx++){
-                cells_INIT(idx);}
-            //sendSubcommand(0x0095); //MUST initalize the FETS to be OFF
-            i = 0;
-=======
             /*for(int idx = 0; idx < NUM_CELLS; idx++){
                 cells_INIT(idx);}*/
             cells_INIT(1);
             //i = 0;
->>>>>>> test-code
             state = EKF_RUN;
             break;
 
@@ -158,23 +126,7 @@ int TickFun_ExtendedKalmanFilter(int state){
 
         case(EKF_RUN):
         //float I_A = current / 1000.0f;     //convert mA → A
-<<<<<<< HEAD
-        if(i < NUM_CELLS && SysON ){
-            Serial.println("On and Running");
-            //float V_V = cell_v[i] / 1000.0f;   // *** FIXED: mV → V
-            Prediction_TimeUpdate(i, current);
-            Correction_MeasUpdate(i, voltage, current);
-            Serial.println(ekf[i].SoC);
-            i++;
-        }
-        else if (i >= NUM_CELLS && SysON){
-            i = 0; //restart the indexing
-            Serial.println("Restart and Running");
-        }
-        else if(!SysON){
-            Serial.println("System Off");
-            //sendSubcommand(0x0095); //TURN OFF FETS IF SYSON IS
-=======
+        //NOTE: INITIAL VOLTAGE IS 3.47V
         if(SysON && ekf[1].SoC > min_SOC){
             Prediction_TimeUpdate(1, current);
             Correction_MeasUpdate(1, voltage, current);
@@ -192,8 +144,8 @@ int TickFun_ExtendedKalmanFilter(int state){
         else if (!SysON){
             Serial.println("Sys off");
 
->>>>>>> test-code
         }
+
         break;
 
         default:
@@ -307,19 +259,11 @@ int BMS_Test_TickFun(int state){
 */
 
 void setup() {
-<<<<<<< HEAD
-  //Wire.begin();
-  Serial.begin(9600);
-  //delay(10);
-  
-  pinMode(buttonA_pin, INPUT_PULLUP);
-=======
   Wire.begin();
   Serial.begin(9600);
   delay(10);
   
   pinMode(buttonA_pin, INPUT);
->>>>>>> test-code
 /*
   // 1) Enter CONFIGUPDATE mode: subcommand 0x0090
   sendSubcommand(0x0090);
@@ -338,15 +282,9 @@ void setup() {
   sendSubcommand(0x0092);
   waitCfgUpdate(false);
 */
-<<<<<<< HEAD
-=======
 
->>>>>>> test-code
   //Set up Tasks
   // TODO: Assign your tasks into the tasks[] array
-    TimerSet(GCD_PERIOD);
-    TimerOn();
-
     tasks[0].period = Button_Period;
     tasks[0].state = ButtonINIT;
     tasks[0].elapsedTime = Button_Period;
@@ -361,6 +299,9 @@ void setup() {
     tasks[2].state = BMS_INIT;
     tasks[2].elapsedTime = BMS_Period;
     tasks[2].TickFct = &BMS_Test_TickFun;*/
+
+    TimerSet(GCD_PERIOD);
+    TimerOn();
 }
 
 void loop() {}
