@@ -3,7 +3,10 @@
 #include "BQ_Commands.h"
 #include "EKF_Functions.h"
 
-#define buttonA_pin A0
+#define CELL_NO_TO_ADDR(cellNo) (0x14 + ((cellNo-1)*2))
+#define buttonA_pin 15
+#define redLED 14
+#define greenLED 13
 
 /*-------------------------------------------*/
 /*------ Global Variables -------------------*/
@@ -17,7 +20,8 @@ unsigned char CHARGE;
 /*-------------------------------------------*/
 
 const unsigned long EKF_Period = 500;
-const unsigned long Button_Period = 500;
+const unsigned long Button_Period = 100;
+const unsigned long BMS_Period = 500;
 
 /*-------------------------------------------*/
 /*--------- Button State Machine ------------*/
@@ -76,17 +80,20 @@ int Button_TickFun(int state){
 enum EKF_State { EKF_init, EKF_RUN };
 
 int TickFun_ExtendedKalmanFilter(int state){
-    static float current = 0.031f; //change to get current command
-    static float voltage = 3.65f;  //change to get voltage command
+    float current = directCommand(0x3A)/3000; //change to get current command
+    double battCell_voltage[10];  //change to get voltage command
+    for (int i =0; i<NUM_CELLS; i++){
+        battCell_voltage[i]=directCommand(CELL_NO_TO_ADDR(i+1))/1000;
+    }
     static unsigned char count;
-
-    const float min_SOC = 0.3;
-    const float max_SOC = 0.6;
-
+    Serial.print("current: ");
+    Serial.println(current);
     /*----------- State Transitions ----------*/
     switch(state){
         case EKF_init:
-            cells_INIT(NUM_CELLS);
+            for(int i = 0; i < NUM_CELLS; i++){
+                cells_INIT(i);
+            }
             count = 0;
             state = EKF_RUN;
         break;
@@ -108,17 +115,24 @@ int TickFun_ExtendedKalmanFilter(int state){
         case EKF_RUN:
             if(count < NUM_CELLS){
                 Prediction_TimeUpdate(count, current);
-                Correction_MeasUpdate(count, voltage, current);
-
+                Correction_MeasUpdate(count, battCell_voltage[count], current);
+                
                 Serial.print("Measured Voltage: ");
-                Serial.println(voltage);
+                Serial.println(battCell_voltage[7]);
 
                 Serial.print("Soc: ");
-                Serial.println(ekf[3].SoC);
+                Serial.println(ekf[7].SoC);
 
                 count++;
             }
             else if(count >= NUM_CELLS){
+                float soc_sum =0.0f;
+                for(int i = 0; i < NUM_CELLS; i++){
+                    soc_sum += ekf[i].SoC;
+                }
+                float pack_soc = soc_sum/NUM_CELLS;
+                Serial.print("Pack SoC: "); 
+                Serial.println(pack_soc);
                 count = 0;
             }
             break;
@@ -134,53 +148,52 @@ int TickFun_ExtendedKalmanFilter(int state){
 /*---------- BMS State Machine --------------*/
 /*-------------------------------------------*/
 
-/*
+
 enum states {BMS_INIT, IDLE, DISCHRG, DISCHRG_DONE, CHRG} BMS_state;
+
 int BMS_Test_TickFun(int state){
-    //static unsigned char idx = 0;
-    //unsigned char pack_v = 0;
+    static unsigned char idx = 0;
+    int batt_cell[10];
+    int16_t pack_curr = directCommand(0x3A)/3;
+    unsigned int pack_v = 0;
+    for (int i =0; i<NUM_CELLS; i++){batt_cell[i]=directCommand(CELL_NO_TO_ADDR(i+1)); pack_v +=batt_cell[i];}
+   /* Serial.print("Pack Voltage: ");
+    Serial.println(pack_v);
+    Serial.print("Pack Current: ");
+    Serial.println(pack_curr);*/
 
     //transitions
     switch(state){
         case (BMS_INIT):
-            //disableDSCHRG_FETS();
-            //disableCHRG_FETS();
-            //disableBalancing();
             CHARGE = 0;
             state = IDLE;
         break;
 
         case (IDLE):
             if(SysON == 1){
-                //EnableDSCHRG_FETS();
-                //EnableBalancing();
                 state = DISCHRG;
             }
         break;
 
         case (DISCHRG):
             if(SysON == 0 ){
-                //disableDSCHRG_FETS();
-                //disableBalancing();
                 state = IDLE;
-            }/*
-            else if( SysON == 1 && ( pack_v <= 33 || ekf.SoC <= MinSoC){
-                //disableDSCHRG_FETS();
+            }
+            else if( ( pack_v <= 30000)){
                 state = DISCHRG_DONE;
             }
         break;
 
-        /*case (DISCHRG_DONE):
-            if(abs(current) >= 100){
-                EnableCHRG_FETS();
+        case (DISCHRG_DONE):
+            if(abs(pack_curr) >= 100){
+
                 CHARGE = 1;
                 state = CHRG;
             }
         break;
         
         case (CHRG):
-            if( abs(current) >= 100 && !CHARGE || ekf.SoC >= MaxSoc){
-                disableBalancing();
+            if( abs(pack_curr) >= 100 && !CHARGE){
                 state = IDLE;
                 }
         break;
@@ -193,37 +206,40 @@ int BMS_Test_TickFun(int state){
     //actions
     switch(state){
         case (BMS_INIT):
+        sendSubcommand(0x0095);
         break;
 
         case IDLE:
+         sendSubcommand(0x0095);
+       //  Serial.println("IDLE");
+         digitalWrite(greenLED, 0);
+         digitalWrite(redLED, 0);
         break;
 
         case DISCHRG:
-            /*
-            if( idx < 10){
-                cell_v[idx] = GetVoltage();
-                idx++;
-            }
-            else{
-                idx = 0;
-            }*
-            
-            pack_v = sum(cell_v);
-            
-           break;
+         sendSubcommand(0x0096);
+       //  Serial.println("DISCHRG");
+         digitalWrite(greenLED, 1);
+         digitalWrite(redLED, 0);
+        break;
 
         case (DISCHRG_DONE):
+         sendSubcommand(0x0095);
+         //Serial.println("DISCHRG done");
+         digitalWrite(greenLED, 0);
+         digitalWrite(redLED, 1);
         break;
 
         case (CHRG):
-        /*if( idx < 10){
-            cell_v[idx] = GetVoltage();
-        }
-        if (pack_v >= 37 || ekf.SoC >= MaxSoC){
-            CHRG = 0;
-        }
-
-        pack_v = sum(cell_v);
+            sendSubcommand(0x0096);
+         //   Serial.println("CHRG");
+            digitalWrite(redLED, 0);
+            if (idx%2 == 0){
+                digitalWrite(greenLED, 1);
+            }
+            else{
+                digitalWrite(greenLED, 0);
+            }
         break;
 
         default:
@@ -232,11 +248,9 @@ int BMS_Test_TickFun(int state){
     
     return state;
 }
-*/
 
-/*-------------------------------------------*/
-/*----------- FreeRTOS Task Wrappers --------*/
-/*-------------------------------------------*/
+
+
 
 void ButtonTask(void *pvParameters){
     int state = ButtonINIT;
@@ -254,13 +268,13 @@ void EKFTask(void *pvParameters){
     }
 }
 
-/*void BMSTest(void *pvParameters){
+void BMSTest(void *pvParameters){
     int state = BMS_INIT;
     while(true){
-        state = BMS_Test_Tickfun(state);
+        state = BMS_Test_TickFun(state);
         vTaskDelay( BMS_Period / portTICK_PERIOD_MS);
     }
-}*/
+}
 
 /*-------------------------------------------*/
 /*--------------- Setup ---------------------*/
@@ -271,9 +285,11 @@ void setup(){
     Serial.begin(9600);
     delay(10);
 
-    pinMode(buttonA_pin, INPUT);
+   pinMode(buttonA_pin, INPUT);
+   pinMode(redLED, OUTPUT);
+   pinMode(greenLED, OUTPUT);
 
-    /*
+    
   //1) Enter CONFIGUPDATE mode: subcommand 0x0090
     sendSubcommand(0x0090);
     waitCfgUpdate(true);
@@ -290,9 +306,7 @@ void setup(){
   //4) Exit CONFIGUPDATE: subcommand 0x0092
     sendSubcommand(0x0092);
     waitCfgUpdate(false);
-*/
     
-/*------- Create FreeRTOS Tasks ----------*/
     xTaskCreatePinnedToCore(
         ButtonTask,
         "ButtonTask",
@@ -313,14 +327,15 @@ void setup(){
         1
     );
 
-    /*xTaskCreatePinnedToCore(
+    xTaskCreatePinnedToCore(
         BMSTest,
+        "BMSTest",
         4096,
         NULL,
         1,
         NULL,
         1
-    );*/
+    );
 }
 
 /*-------------------------------------------*/

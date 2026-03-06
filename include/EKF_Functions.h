@@ -61,11 +61,11 @@ void cells_INIT(int i){
     ekf[i].Q_nom = 3.5;           //Nomincal capacity is 3500 mAhr = 3.5 Ahr
 
 
-    ekf[i].R_1 = 0.015; //milli-ohms
+    ekf[i].R_1 = 0.015f; //milli-ohms
     ekf[i].C_1 = 2500;  //Farads
     ekf[i].dt = 0.1f;   //100ms
     ekf[i].a = exp(-ekf[i].dt/(ekf[i].R_1 * ekf[i].C_1)); 
-    ekf[i].b = ekf[i].R_1*(1.0f - a);
+    ekf[i].b = ekf[i].R_1*(1.0f - ekf[i].a);
 
     //Covariance matrix
     ekf[i].P_00 = 0.01f;
@@ -104,7 +104,7 @@ void Prediction_TimeUpdate(int idx, float I ){
 /*-------------------------------------------*/
 /*----- Correction Measurement Update -------*/
 /*-------------------------------------------*/
-void Correction_MeasUpdate( int idx, float V, float I){
+void Correction_MeasUpdate( int idx, double V, float I){
     //Vt = V_OCV(SoC(K)) - Vrc - R0*I(K)
     float V_Predict = OCV_SOC(ekf[idx].SoC) - ekf[idx].Vrc - ekf[idx].R_0* I;
     float dK = V - V_Predict;

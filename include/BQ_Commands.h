@@ -6,6 +6,7 @@
 
 const uint8_t BQ_ADDR = 0x08;   // <-- set to your BQ76942 I2C address
 
+
 int16_t directCommand(byte command) {
   Wire.beginTransmission(BQ_ADDR);
   Wire.write(command);
